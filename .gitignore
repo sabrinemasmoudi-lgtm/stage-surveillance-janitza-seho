@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.env/
+ENV/
+
+# Logs
+*.log
+logs/
+
+# Database (uncomment if you don't want to track the DB)
+# *.db
+# *.db-shm
+# *.db-wal
+
+# JSON live files
+statut_actuel.json
+predictions_actuelles.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Firebase credentials
+firebase-*.json
+serviceAccountKey.json

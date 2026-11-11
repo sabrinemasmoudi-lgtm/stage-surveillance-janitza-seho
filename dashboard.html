@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEHO MWS 2300 — Supervision Resistances</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    --bg-void:#0B0F14;
+    --bg-panel:#12181F;
+    --bg-panel-raised:#1A222C;
+    --border:#232D3A;
+    --border-soft:#1C2530;
+    --text-primary:#E7EBF0;
+    --text-muted:#7C8898;
+    --text-dim:#4E5A6B;
+
+    --l1:#4FD1C5;
+    --l1-glow:rgba(79,209,197,0.18);
+    --l2:#F2B84B;
+    --l2-glow:rgba(242,184,75,0.18);
+    --l3:#C792EA;
+    --l3-glow:rgba(199,146,234,0.18);
+
+    --good:#4ADE80;
+    --warn:#F2B84B;
+    --crit:#F0554A;
+    --copper:#BD7F4B;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  body{
+    background:
+      radial-gradient(circle at 15% 0%, #10151C 0%, var(--bg-void) 45%),
+      var(--bg-void);
+    color:var(--text-primary);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    padding:20px;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .mono{ font-family:'JetBrains Mono',monospace; }
+  .disp{ font-family:'Space Grotesk',sans-serif; }
+
+  /* ---------- TOP BAR ---------- */
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:12px;
+    padding:14px 20px;
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    margin-bottom:16px;
+  }
+  .titre-machine{
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+  }
+  .titre-machine h1{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:19px;
+    font-weight:700;
+    letter-spacing:0.3px;
+  }
+  .titre-machine span{
+    color:var(--text-muted);
+    font-size:12.5px;
+  }
+  .barre-statuts{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .pill{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:6px 12px;
+    border-radius:999px;
+    font-size:12px;
+    font-weight:600;
+    font-family:'JetBrains Mono',monospace;
+    border:1px solid var(--border);
+    background:var(--bg-panel-raised);
+    white-space:nowrap;
+  }
+  .dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dot-good{ background:var(--good); box-shadow:0 0 8px var(--good); animation:pulse 2s infinite; }
+  .dot-warn{ background:var(--warn); box-shadow:0 0 8px var(--warn); animation:pulse 1.2s infinite; }
+  .dot-crit{ background:var(--crit); box-shadow:0 0 8px var(--crit); animation:pulse 0.8s infinite; }
+  .dot-off{ background:var(--text-dim); }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  #horloge{ color:var(--text-muted); font-size:12px; }
+
+  /* ---------- LAYOUT ---------- */
+  .grille-principale{
+    display:grid;
+    grid-template-columns:2fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:980px){ .grille-principale{ grid-template-columns:1fr; } }
+
+  .panneau{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:18px 20px;
+    margin-bottom:16px;
+  }
+  .panneau h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:12.5px;
+    font-weight:600;
+    letter-spacing:1.2px;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    margin-bottom:14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .barre-cuivre{
+    height:2px;
+    background:linear-gradient(90deg, transparent, var(--copper), transparent);
+    margin:2px 0 16px 0;
+    opacity:0.5;
+  }
+
+  /* ---------- OSCILLOSCOPE (signature) ---------- */
+  #scope-wrap{ position:relative; }
+  #canvas-scope{ width:100%; height:220px; display:block; border-radius:8px; }
+  .legende-scope{
+    display:flex;
+    gap:18px;
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  .legende-item{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-size:12px;
+    font-family:'JetBrains Mono',monospace;
+    color:var(--text-muted);
+  }
+  .legende-swatch{ width:14px; height:3px; border-radius:2px; }
+
+  /* ---------- CARTES PHASES ---------- */
+  .cartes-phases{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:14px;
+    margin-bottom:16px;
+  }
+  @media (max-width:700px){ .cartes-phases{ grid-template-columns:1fr; } }
+
+  .carte-phase{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px 18px;
+    position:relative;
+    overflow:hidden;
+  }
+  .carte-phase::before{
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:3px;
+    background:var(--phase-color);
+  }
+  .carte-phase .en-tete-phase{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .carte-phase .nom-phase{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    color:var(--phase-color);
+  }
+  .badge-sante{
+    font-size:10px;
+    font-weight:600;
+    padding:2px 8px;
+    border-radius:6px;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .valeur-principale{
+    font-family:'JetBrains Mono',monospace;
+    font-size:30px;
+    font-weight:700;
+    line-height:1;
+  }
+  .unite{ font-size:14px; color:var(--text-muted); font-weight:500; margin-left:4px;}
+  .sous-valeurs{
+    display:flex;
+    justify-content:space-between;
+    margin-top:12px;
+    padding-top:12px;
+    border-top:1px solid var(--border-soft);
+  }
+  .sous-valeur .label{ font-size:10.5px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.5px; }
+  .sous-valeur .val{ font-family:'JetBrains Mono',monospace; font-size:15px; font-weight:600; margin-top:2px; }
+
+  /* ---------- CARTES RESUME ---------- */
+  .cartes-resume{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:14px;
+    margin-bottom:16px;
+  }
+  @media (max-width:820px){ .cartes-resume{ grid-template-columns:repeat(2,1fr); } }
+  .carte-resume{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:16px 18px;
+  }
+  .carte-resume .label{
+    font-size:11px;
+    color:var(--text-muted);
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    margin-bottom:8px;
+  }
+  .carte-resume .valeur{
+    font-family:'JetBrains Mono',monospace;
+    font-size:26px;
+    font-weight:700;
+  }
+  .carte-resume .valeur small{ font-size:13px; color:var(--text-muted); font-weight:500;}
+
+  /* ---------- ENERGIE (bar chart) ---------- */
+  #canvas-energie{ width:100%; height:150px; display:block; }
+
+  /* ---------- SANTE / MTBF ---------- */
+  .ligne-sante{
+    padding:10px 0;
+    border-bottom:1px solid var(--border-soft);
+    font-size:13px;
+  }
+  .ligne-sante:last-child{ border-bottom:none; }
+  .ligne-sante .ligne-sante-haut{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .barre-progression{
+    flex:1;
+    height:6px;
+    background:var(--bg-panel-raised);
+    border-radius:3px;
+    margin:0 12px;
+    overflow:hidden;
+  }
+  .barre-progression-remplissage{ height:100%; border-radius:3px; transition:width 0.6s ease, background 0.4s ease; }
+  .ligne-sante-message{
+    margin-top:6px;
+    font-size:11.5px;
+    color:var(--text-dim);
+    line-height:1.4;
+  }
+  .ligne-sante-message.tendance-active{ color:var(--warn); }
+  .ligne-sante-panne{
+    font-family:'JetBrains Mono',monospace;
+    font-weight:600;
+  }
+
+  /* ---------- ALERTES ---------- */
+  .liste-alertes{ max-height:320px; overflow-y:auto; }
+  .item-alerte{
+    display:flex;
+    gap:10px;
+    padding:9px 0;
+    border-bottom:1px solid var(--border-soft);
+    font-size:12.5px;
+  }
+  .item-alerte:last-child{ border-bottom:none; }
+  .item-alerte .barre-type{ width:3px; border-radius:2px; flex-shrink:0; }
+  .item-alerte .contenu .msg{ color:var(--text-primary); line-height:1.4; }
+  .item-alerte .contenu .meta{ color:var(--text-dim); font-family:'JetBrains Mono',monospace; font-size:10.5px; margin-top:2px; }
+  .aucune-alerte{ color:var(--text-muted); font-size:13px; padding:20px 0; text-align:center; }
+
+  footer{
+    text-align:center;
+    color:var(--text-dim);
+    font-size:11px;
+    font-family:'JetBrains Mono',monospace;
+    padding:18px 0 4px;
+  }
+
+  ::-webkit-scrollbar{ width:6px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="titre-machine">
+    <h1>SEHO MWS 2300 <span style="color:var(--text-dim)">/</span> 2340-LRT</h1>
+    <span>Marquardt Tunisie — Resistances de prechauffage triphasees</span>
+  </div>
+  <div class="barre-statuts">
+    <div class="pill" id="pill-machine"><span class="dot dot-off"></span><span id="txt-machine">—</span></div>
+    <div class="pill" id="pill-comm"><span class="dot dot-off"></span><span id="txt-comm">—</span></div>
+    <div class="pill" id="pill-alertes"><span class="dot dot-off"></span><span id="txt-alertes">—</span></div>
+    <div class="pill" id="horloge">--:--:--</div>
+  </div>
+</header>
+
+<!-- CARTES PHASES -->
+<div class="cartes-phases">
+  <div class="carte-phase" style="--phase-color:var(--l1)">
+    <div class="en-tete-phase">
+      <span class="nom-phase">L1</span>
+      <span class="badge-sante" id="badge-sante-I1">—</span>
+    </div>
+    <div class="valeur-principale"><span id="val-I1">0.00</span><span class="unite">A</span></div>
+    <div class="sous-valeurs">
+      <div class="sous-valeur"><div class="label">Puissance</div><div class="val" id="val-P1">— kW</div></div>
+      <div class="sous-valeur"><div class="label">Energie jour</div><div class="val" id="val-E1j">— kWh</div></div>
+    </div>
+  </div>
+  <div class="carte-phase" style="--phase-color:var(--l2)">
+    <div class="en-tete-phase">
+      <span class="nom-phase">L2</span>
+      <span class="badge-sante" id="badge-sante-I2">—</span>
+    </div>
+    <div class="valeur-principale"><span id="val-I2">0.00</span><span class="unite">A</span></div>
+    <div class="sous-valeurs">
+      <div class="sous-valeur"><div class="label">Puissance</div><div class="val" id="val-P2">— kW</div></div>
+      <div class="sous-valeur"><div class="label">Energie jour</div><div class="val" id="val-E2j">— kWh</div></div>
+    </div>
+  </div>
+  <div class="carte-phase" style="--phase-color:var(--l3)">
+    <div class="en-tete-phase">
+      <span class="nom-phase">L3</span>
+      <span class="badge-sante" id="badge-sante-I3">—</span>
+    </div>
+    <div class="valeur-principale"><span id="val-I3">0.00</span><span class="unite">A</span></div>
+    <div class="sous-valeurs">
+      <div class="sous-valeur"><div class="label">Puissance</div><div class="val" id="val-P3">— kW</div></div>
+      <div class="sous-valeur"><div class="label">Energie jour</div><div class="val" id="val-E3j">— kWh</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CARTES RESUME -->
+<div class="cartes-resume">
+  <div class="carte-resume">
+    <div class="label">Puissance totale</div>
+    <div class="valeur"><span id="res-puissance">0.00</span><small> kW</small></div>
+  </div>
+  <div class="carte-resume">
+    <div class="label">Energie — aujourd'hui</div>
+    <div class="valeur"><span id="res-energie-jour">0.00</span><small> kWh</small></div>
+  </div>
+  <div class="carte-resume">
+    <div class="label">Energie cumulee totale</div>
+    <div class="valeur"><span id="res-energie-totale">0.00</span><small> kWh</small></div>
+  </div>
+  <div class="carte-resume">
+    <div class="label">Equilibre des phases</div>
+    <div class="valeur"><span id="res-equilibre">—</span><small> %</small></div>
+  </div>
+</div>
+
+<div class="grille-principale">
+  <!-- COLONNE GAUCHE -->
+  <div>
+    <div class="panneau">
+      <h2>Courant par phase — trace temps reel</h2>
+      <div class="barre-cuivre"></div>
+      <div id="scope-wrap">
+        <canvas id="canvas-scope"></canvas>
+      </div>
+      <div class="legende-scope">
+        <div class="legende-item"><span class="legende-swatch" style="background:var(--l1)"></span>L1 (I1)</div>
+        <div class="legende-item"><span class="legende-swatch" style="background:var(--l2)"></span>L2 (I2)</div>
+        <div class="legende-item"><span class="legende-swatch" style="background:var(--l3)"></span>L3 (I3)</div>
+        <div class="legende-item" style="margin-left:auto">derniers ~10 min, tension nominale 228V (non mesuree)</div>
+      </div>
+    </div>
+
+    <div class="panneau">
+      <h2>Energie journaliere — 14 derniers jours</h2>
+      <div class="barre-cuivre"></div>
+      <canvas id="canvas-energie"></canvas>
+    </div>
+  </div>
+
+  <!-- COLONNE DROITE -->
+  <div>
+    <div class="panneau">
+      <h2>Indice de sante &amp; MTBF</h2>
+      <div class="barre-cuivre"></div>
+      <div id="bloc-sante"></div>
+    </div>
+
+    <div class="panneau">
+      <h2>Alertes recentes</h2>
+      <div class="barre-cuivre"></div>
+      <div class="liste-alertes" id="liste-alertes">
+        <div class="aucune-alerte">Chargement…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>surveillance.db · rafraichissement automatique · SEHO / Janitza UMG 96RM-E-RCM</footer>
+
+<script>
+const COULEURS = { I1:'#4FD1C5', I2:'#F2B84B', I3:'#C792EA' };
+
+function fmt(v, dec=2){
+  return (v === null || v === undefined || isNaN(v)) ? '—' : Number(v).toFixed(dec);
+}
+
+function setPill(pillId, txtId, dotClass, texte){
+  const pill = document.getElementById(pillId);
+  const dot = pill.querySelector('.dot');
+  dot.className = 'dot ' + dotClass;
+  document.getElementById(txtId).textContent = texte;
+}
+
+function couleurSante(cat){
+  if(!cat) return 'var(--text-dim)';
+  if(cat.startsWith('BON')) return 'var(--good)';
+  if(cat.startsWith('A SURVEILLER')) return 'var(--warn)';
+  return 'var(--crit)';
+}
+
+// ---------------- Horloge ----------------
+setInterval(()=>{
+  document.getElementById('horloge').textContent = new Date().toLocaleTimeString('fr-FR');
+}, 1000);
+
+// ---------------- /api/status ----------------
+async function rafraichirStatus(){
+  try{
+    const r = await fetch('/api/status');
+    if(!r.ok){ throw new Error('indisponible'); }
+    const d = await r.json();
+
+    // Statut machine
+    if(d.statut_machine === 'PRODUCTION_ACTIVE'){
+      setPill('pill-machine','txt-machine','dot-good','PRODUCTION ACTIVE');
+    } else {
+      setPill('pill-machine','txt-machine','dot-warn','MACHINE A L\'ARRET');
+    }
+
+    // Statut communication
+    const comm = d.statut_communication;
+    if(comm === 'OK') setPill('pill-comm','txt-comm','dot-good','COMM OK');
+    else if(comm === 'INSTABLE') setPill('pill-comm','txt-comm','dot-warn','COMM INSTABLE');
+    else setPill('pill-comm','txt-comm','dot-crit','COMM PERDUE');
+
+    // Alertes actives
+    const nbA = d.nb_alertes_actives || 0;
+    setPill('pill-alertes','txt-alertes', nbA>0 ? 'dot-crit':'dot-good', nbA + ' alerte' + (nbA>1?'s':'') + ' active' + (nbA>1?'s':''));
+
+    // Mesures par phase
+    const m = d.mesures || {};
+    ['I1','I2','I3'].forEach((k,i)=>{
+      const L = 'L'+(i+1);
+      const mes = m[L] || {};
+      document.getElementById('val-'+k).textContent = fmt(mes.courant_A);
+      document.getElementById('val-P'+(i+1)).textContent = mes.puissance_estimee_W!=null ? fmt(mes.puissance_estimee_W/1000,2)+' kW' : '— kW';
+    });
+
+    // Sante -> badge sur cartes phases
+    const sante = d.sante || {};
+    ['I1','I2','I3'].forEach(k=>{
+      const b = document.getElementById('badge-sante-'+k);
+      const s = sante[k];
+      if(s){
+        b.textContent = s.categorie.split(' ')[0] + ' ' + s.indice + '%';
+        b.style.background = couleurSante(s.categorie) + '22';
+        b.style.color = couleurSante(s.categorie);
+      } else {
+        b.textContent = '—';
+        b.style.background = 'transparent';
+        b.style.color = 'var(--text-dim)';
+      }
+    });
+
+    // Energie par phase (jour) + cartes resume
+    const e = d.energie;
+    if(e){
+      document.getElementById('val-E1j').textContent = fmt(e.jour_kWh.L1) + ' kWh';
+      document.getElementById('val-E2j').textContent = fmt(e.jour_kWh.L2) + ' kWh';
+      document.getElementById('val-E3j').textContent = fmt(e.jour_kWh.L3) + ' kWh';
+      document.getElementById('res-energie-jour').textContent = fmt(e.jour_kWh.totale);
+      document.getElementById('res-energie-totale').textContent = fmt(e.cumulee_kWh.totale);
+    }
+
+    document.getElementById('res-puissance').textContent = fmt(d.puissance_totale_kW);
+    document.getElementById('res-equilibre').textContent = d.equilibre_phases_pct!=null ? fmt(d.equilibre_phases_pct,1) : '—';
+
+  } catch(err){
+    setPill('pill-comm','txt-comm','dot-crit','SERVEUR INJOIGNABLE');
+  }
+}
+
+// ---------------- Oscilloscope courant ----------------
+const canvasScope = document.getElementById('canvas-scope');
+const ctxScope = canvasScope.getContext('2d');
+
+function redimensionnerCanvas(canvas){
+  const ratio = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * ratio;
+  canvas.height = h * ratio;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+}
+
+function dessinerScope(donnees){
+  redimensionnerCanvas(canvasScope);
+  const w = canvasScope.clientWidth, h = canvasScope.clientHeight;
+  ctxScope.clearRect(0,0,w,h);
+
+  // fond + grille façon analyseur
+  ctxScope.fillStyle = '#0D1319';
+  ctxScope.fillRect(0,0,w,h);
+  ctxScope.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctxScope.lineWidth = 1;
+  for(let gx=0; gx<=10; gx++){
+    const x = (gx/10)*w;
+    ctxScope.beginPath(); ctxScope.moveTo(x,0); ctxScope.lineTo(x,h); ctxScope.stroke();
+  }
+  for(let gy=0; gy<=6; gy++){
+    const y = (gy/6)*h;
+    ctxScope.beginPath(); ctxScope.moveTo(0,y); ctxScope.lineTo(w,y); ctxScope.stroke();
+  }
+
+  if(!donnees || donnees.length < 2) return;
+
+  let vmax = 1;
+  donnees.forEach(pt=>{
+    ['I1_A','I2_A','I3_A'].forEach(k=>{ if(pt[k]!=null) vmax = Math.max(vmax, pt[k]); });
+  });
+  vmax = vmax * 1.15;
+
+  const n = donnees.length;
+  ['I1_A','I2_A','I3_A'].forEach((cle, idx)=>{
+    const couleur = COULEURS['I'+(idx+1)];
+    ctxScope.beginPath();
+    ctxScope.lineWidth = 2;
+    ctxScope.strokeStyle = couleur;
+    ctxScope.shadowColor = couleur;
+    ctxScope.shadowBlur = 6;
+    donnees.forEach((pt,i)=>{
+      const v = pt[cle];
+      if(v==null) return;
+      const x = (i/(n-1)) * w;
+      const y = h - (v/vmax) * (h-10) - 5;
+      if(i===0) ctxScope.moveTo(x,y); else ctxScope.lineTo(x,y);
+    });
+    ctxScope.stroke();
+    ctxScope.shadowBlur = 0;
+  });
+
+  // etiquette max A
+  ctxScope.fillStyle = 'rgba(255,255,255,0.35)';
+  ctxScope.font = '10px JetBrains Mono, monospace';
+  ctxScope.fillText(vmax.toFixed(1)+' A', 6, 12);
+}
+
+async function rafraichirScope(){
+  try{
+    const r = await fetch('/api/historique/courant');
+    const d = await r.json();
+    dessinerScope(d);
+  } catch(err){}
+}
+
+// ---------------- Energie journaliere (barres) ----------------
+const canvasEnergie = document.getElementById('canvas-energie');
+const ctxEnergie = canvasEnergie.getContext('2d');
+
+function dessinerEnergie(historique){
+  redimensionnerCanvas(canvasEnergie);
+  const w = canvasEnergie.clientWidth, h = canvasEnergie.clientHeight;
+  ctxEnergie.clearRect(0,0,w,h);
+  if(!historique || historique.length===0) return;
+
+  const vmax = Math.max(1, ...historique.map(p=>p.energie_jour_kWh||0)) * 1.2;
+  const marge = 28;
+  const largeurZone = w - marge;
+  const largeurBarre = (largeurZone / historique.length) * 0.6;
+  const espacement = (largeurZone / historique.length);
+
+  historique.forEach((pt,i)=>{
+    const val = pt.energie_jour_kWh || 0;
+    const bh = (val/vmax) * (h-30);
+    const x = marge + i*espacement + (espacement-largeurBarre)/2;
+    const y = h - bh - 18;
+
+    const grad = ctxEnergie.createLinearGradient(0,y,0,h-18);
+    grad.addColorStop(0, '#4FD1C5');
+    grad.addColorStop(1, 'rgba(79,209,197,0.15)');
+    ctxEnergie.fillStyle = grad;
+    ctxEnergie.beginPath();
+    ctxEnergie.roundRect ? ctxEnergie.roundRect(x,y,largeurBarre,bh,3) : ctxEnergie.rect(x,y,largeurBarre,bh);
+    ctxEnergie.fill();
+
+    ctxEnergie.fillStyle = 'rgba(255,255,255,0.3)';
+    ctxEnergie.font = '9px JetBrains Mono, monospace';
+    const jourLabel = (pt.date||'').slice(5);
+    ctxEnergie.save();
+    ctxEnergie.translate(x+largeurBarre/2, h-4);
+    ctxEnergie.textAlign = 'center';
+    ctxEnergie.fillText(jourLabel, 0, 0);
+    ctxEnergie.restore();
+  });
+
+  ctxEnergie.fillStyle = 'rgba(255,255,255,0.35)';
+  ctxEnergie.font = '10px JetBrains Mono, monospace';
+  ctxEnergie.fillText(vmax.toFixed(1)+' kWh', 4, 12);
+}
+
+async function rafraichirEnergieChart(){
+  try{
+    const r = await fetch('/api/energie');
+    const d = await r.json();
+    dessinerEnergie(d.historique_14j);
+  } catch(err){}
+}
+
+// ---------------- Sante / MTBF ----------------
+async function rafraichirSante(){
+  try{
+    const [rSante, rPred] = await Promise.all([
+      fetch('/api/sante'),
+      fetch('/api/predictions_db')
+    ]);
+    const dSante = await rSante.json();
+    const dPred  = await rPred.json();
+
+    const cont = document.getElementById('bloc-sante');
+    cont.innerHTML = '';
+
+    ['I1','I2','I3'].forEach(phase=>{
+      const s = dSante[phase];
+      const p = dPred[phase]; // { message, heures_avant_panne, tendance_significative, ... } ou undefined
+
+      const col = document.createElement('div');
+      col.className = 'ligne-sante';
+
+      // La tendance predictive prend le pas sur l'indice de sante pour la
+      // couleur : une derive significative doit sauter aux yeux meme si
+      // l'indice de sante composite est encore correct.
+      const tendanceActive = !!(p && p.tendance_significative);
+      let couleurBarre = 'var(--text-dim)';
+      let largeurBarre = 0;
+      if (s){
+        couleurBarre = tendanceActive ? 'var(--warn)' : couleurSante(s.categorie);
+        largeurBarre = s.indice_sante;
+      } else if (tendanceActive) {
+        couleurBarre = 'var(--warn)';
+        largeurBarre = 50;
+      }
+
+      let ligneHaut;
+      if (s){
+        ligneHaut = `
+          <span class="mono" style="color:${COULEURS[phase]};font-weight:700">${phase}</span>
+          <div class="barre-progression"><div class="barre-progression-remplissage" style="width:${largeurBarre}%;background:${couleurBarre}"></div></div>
+          <span class="mono" style="color:${couleurBarre};min-width:56px;text-align:right">${s.indice_sante}%</span>
+        `;
+      } else {
+        ligneHaut = `
+          <span class="mono" style="color:${COULEURS[phase]};font-weight:700">${phase}</span>
+          <span style="color:var(--text-dim);margin-left:auto">donnees insuffisantes</span>
+        `;
+      }
+
+      // Sous-ligne issue directement de la table 'predictions' (module predictif)
+      let sousLigne = '';
+      if (p && p.message){
+        let texte = p.message;
+        if (p.heures_avant_panne !== null && p.heures_avant_panne !== undefined){
+          texte += ` — <span class="ligne-sante-panne">Panne estimee dans ${Number(p.heures_avant_panne).toFixed(1)}h</span>`;
+        }
+        sousLigne = `<div class="ligne-sante-message${tendanceActive ? ' tendance-active' : ''}">${texte}</div>`;
+      }
+
+      col.innerHTML = `<div class="ligne-sante-haut">${ligneHaut}</div>${sousLigne}`;
+      cont.appendChild(col);
+    });
+  } catch(err){}
+}
+
+// ---------------- Alertes ----------------
+async function rafraichirAlertes(){
+  try{
+    const r = await fetch('/api/alertes');
+    const d = await r.json();
+    const cont = document.getElementById('liste-alertes');
+    if(!d || d.length===0){
+      cont.innerHTML = '<div class="aucune-alerte">Aucune alerte enregistree.</div>';
+      return;
+    }
+    cont.innerHTML = d.map(a=>{
+      let couleur = 'var(--text-dim)';
+      if(a.type_alerte === 'PANNE') couleur = 'var(--crit)';
+      else if(a.type_alerte === 'DESEQUILIBRE') couleur = 'var(--warn)';
+      else if(a.type_alerte === 'PREDICTIF') couleur = 'var(--l3)';
+      else if((a.type_alerte||'').includes('COMMUNICATION')) couleur = 'var(--l2)';
+      return `<div class="item-alerte">
+        <div class="barre-type" style="background:${couleur}"></div>
+        <div class="contenu">
+          <div class="msg">${a.message}</div>
+          <div class="meta">${a.horodatage}${a.phase ? ' · '+a.phase : ''} · ${a.type_alerte}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(err){}
+}
+
+// ---------------- Boucles de rafraichissement ----------------
+rafraichirStatus(); rafraichirScope(); rafraichirEnergieChart(); rafraichirSante(); rafraichirAlertes();
+
+setInterval(rafraichirStatus, 2000);
+setInterval(rafraichirScope, 4000);
+setInterval(rafraichirEnergieChart, 30000);
+setInterval(rafraichirSante, 20000);
+setInterval(rafraichirAlertes, 10000);
+window.addEventListener('resize', ()=>{ rafraichirScope(); rafraichirEnergieChart(); });
+</script>
+
+</body>
+</html>
